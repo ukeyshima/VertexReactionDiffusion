@@ -1,0 +1,76 @@
+#pragma kernel Init
+#pragma kernel Integrate
+#pragma kernel ParallelBitonic_B16
+#pragma kernel ParallelBitonic_B8
+#pragma kernel ParallelBitonic_B4
+#pragma kernel ParallelBitonic_B2
+#pragma kernel ParallelBitonic_C4
+#pragma kernel ParallelBitonic_C2
+#pragma kernel BuildGridBuffer
+#pragma kernel ClearGridIndexReferenceBuffer
+#pragma kernel BuildGridIndexReferenceBuffer
+
+struct Vertex { float3 position; };
+int _VertexNum;
+RWStructuredBuffer<Vertex> _VertexBuffer;
+#define PARTICLE Vertex
+#define PARTICLE_BUFFER _VertexBuffer
+#define PARTICLE_NUM _VertexNum
+#include "Assets/VertexReactionDiffusion/Shaderes/Common/GridIndexReference.hlsl"
+#include "Assets/VertexReactionDiffusion/Shaderes/Common/Struct/ReactionDiffusionParams.hlsl"
+#include "Assets/VertexReactionDiffusion/Shaderes/Common/SPHKernel.hlsl"
+
+#define THREAD_NUM 128
+
+RWStructuredBuffer<ReactionDiffusionParams> _ReactionDiffusionParamsBuffer;
+
+float _VertexDistanceScale;
+float _SmoothLength;
+float _DiffusionRateA;
+float _DiffusionRateB;
+float _Feed;
+float _Kill;
+float _DeltaTime;
+float _InitialBScale;
+float2 _InitialBPoint;
+
+[numthreads(THREAD_NUM, 1, 1)]
+void Init(uint id : SV_DispatchThreadID)
+{
+    if(id > (uint)_VertexNum - 1) return;
+
+    float3 vertexPos = _VertexBuffer[id].position;
+
+    _ReactionDiffusionParamsBuffer[id].A = 1.0;
+    _ReactionDiffusionParamsBuffer[id].B = 1.0 - smoothstep(length(vertexPos.xy - _InitialBPoint), 0.0, _InitialBScale);
+}
+
+[numthreads(THREAD_NUM, 1, 1)]
+void Integrate(uint id : SV_DispatchThreadID)
+{
+    if(id > (uint)_VertexNum - 1) return;
+
+    ReactionDiffusionParams params = _ReactionDiffusionParamsBuffer[id];
+
+    float A = params.A;
+    float B = params.B;
+    float nextA = A;
+    float nextB = B;
+
+    SEARCH_NEIBOUR_PARTICLE_START(id, vertexPos, neighborVertexPos, neighborVertexId)
+    {
+        ReactionDiffusionParams neighborParams = _ReactionDiffusionParamsBuffer[neighborVertexId];
+        float3 diff = neighborVertexPos - vertexPos;
+        float dist = sqrt(dot(diff, diff)) * _VertexDistanceScale;
+        float smoothLength = _SmoothLength * _VertexDistanceScale;
+        nextA += _DiffusionRateA * ViscosityLaplacian(dist, smoothLength) * (neighborParams.A - A) * _DeltaTime;
+        nextB += _DiffusionRateB * ViscosityLaplacian(dist, smoothLength) * (neighborParams.B - B) * _DeltaTime;
+    }
+    SEARCH_NEIBOUR_PARTICLE_END
+
+    nextA += (-A * B * B + _Feed * (1 - A)) * _DeltaTime;
+    nextB += (A * B * B - (_Kill + _Feed) * B) * _DeltaTime;
+
+    _ReactionDiffusionParamsBuffer[id].A = nextA;
+    _ReactionDiffusionParamsBuffer[id].B = nextB;
+}

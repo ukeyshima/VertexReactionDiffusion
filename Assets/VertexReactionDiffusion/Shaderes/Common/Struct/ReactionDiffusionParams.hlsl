@@ -1,0 +1,10 @@
+#ifndef INCLUDED_REACTION_DIFFUSION_PARMS_STRUCT
+#define INCLUDED_REACTION_DIFFUSION_PARMS_STRUCT
+
+struct ReactionDiffusionParams
+{
+    float A;
+    float B;
+};
+
+#endif //INCLUDED_REACTION_DIFFUSION_PARMS_STRUCT

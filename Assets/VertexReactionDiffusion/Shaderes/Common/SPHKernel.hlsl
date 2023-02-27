@@ -3,6 +3,10 @@
 
 #define PI 3.141592
 
+float Poly6(float r, float h) {
+    return r > 0.0 && r <= h ? 315.0 / (64.0 * PI * pow(abs(h), 9.0)) * (h * h - r * r) * (h * h - r * r) * (h * h - r * r) : 0.0;
+}
+
 float Poly6Laplacian(float r, float h) {
     return r > 0.0 && r < h ? -945.0 / (32.0 * PI * pow(abs(h), 9.0)) * 3.0 * (h * h - r * r) * (h * h - r * r) - 4.0 * r * r * (h * h - r * r) : 0.0;
 }

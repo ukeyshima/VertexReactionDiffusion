@@ -9,8 +9,8 @@ namespace VertexReactionDiffusion
         [SerializeField] private ComputeShader _computeShader;
         [SerializeField] private Mesh _mesh;
         [SerializeField] private ShaderMaterial _renderer;
-        [SerializeField] private float _vertexDistanceScale = 1200;
-        [SerializeField] private float _smoothLength = 0.002f;
+        [SerializeField] private float _vertexDistanceScale = 2500;
+        [SerializeField] private float _smoothLength = 0.003f;
         [SerializeField] private float _diffusionRateA = 1f;
         [SerializeField] private float _diffusionRateB = 0.5f;
         [SerializeField] private float _feed = 0.037f;
@@ -27,6 +27,7 @@ namespace VertexReactionDiffusion
         private GraphicsBuffer _gridIndexBuffer;
         private GraphicsBuffer _gridIndexReferenceBuffer;
         private GraphicsBuffer _reactionDiffusionParamsBuffer;
+        private GraphicsBuffer _densityBuffer;
 
         private Struct.GridIndex[] _gridIndexArray;
 
@@ -47,6 +48,7 @@ namespace VertexReactionDiffusion
             _gridIndexReferenceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _gridNum.x * _gridNum.y * _gridNum.z, Marshal.SizeOf(typeof(Struct.GridIndexReference)));
             _reactionDiffusionParamsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _vertexNum, Marshal.SizeOf(typeof(Struct.ReactionDiffusionParams)));
             _vertexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _vertexNum, Marshal.SizeOf(typeof(Vector3)));
+            _densityBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _vertexNum, Marshal.SizeOf(typeof(float)));
 
             _vertexBuffer.SetData(_mesh.vertices);
 
@@ -94,11 +96,19 @@ namespace VertexReactionDiffusion
             _computeShader.SetBuffer(kernel.Index, "_GridIndexReferenceBuffer", _gridIndexReferenceBuffer);
             _computeShader.Dispatch(kernel.Index, _gridIndexBuffer.count / kernel.ThreadNumX + 1, 1, 1);
 
+            kernel = new Kernel(_computeShader, "CalcDensity");
+            _computeShader.SetBuffer(kernel.Index, "_GridIndexBuffer", _gridIndexBuffer);
+            _computeShader.SetBuffer(kernel.Index, "_GridIndexReferenceBuffer", _gridIndexReferenceBuffer);
+            _computeShader.SetBuffer(kernel.Index, "_DensityBuffer", _densityBuffer);
+            _computeShader.SetBuffer(kernel.Index, "_VertexBuffer", _vertexBuffer);
+            _computeShader.Dispatch(kernel.Index, _gridIndexBuffer.count / kernel.ThreadNumX + 1, 1, 1);
+
             kernel = new Kernel(_computeShader, "Integrate");
             _computeShader.SetBuffer(kernel.Index, "_GridIndexBuffer", _gridIndexBuffer);
             _computeShader.SetBuffer(kernel.Index, "_GridIndexReferenceBuffer", _gridIndexReferenceBuffer);
             _computeShader.SetBuffer(kernel.Index, "_ReactionDiffusionParamsBuffer", _reactionDiffusionParamsBuffer);
             _computeShader.SetBuffer(kernel.Index, "_VertexBuffer", _vertexBuffer);
+            _computeShader.SetBuffer(kernel.Index, "_DensityBuffer", _densityBuffer);
             _computeShader.Dispatch(kernel.Index, _vertexNum / kernel.ThreadNumX + 1, 1, 1);
 
             _renderer.Material.SetBuffer("_ReactionDiffusionParamsBuffer", _reactionDiffusionParamsBuffer);
@@ -112,6 +122,7 @@ namespace VertexReactionDiffusion
             _gridIndexBuffer?.Dispose();
             _gridIndexReferenceBuffer?.Dispose();
             _reactionDiffusionParamsBuffer?.Dispose();
+            _densityBuffer?.Dispose();
             _renderer.Dispose();
         }
     }

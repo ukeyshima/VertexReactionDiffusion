@@ -1,5 +1,6 @@
 #pragma kernel Init
 #pragma kernel Integrate
+#pragma kernel CalcDensity
 #pragma kernel ParallelBitonic_B16
 #pragma kernel ParallelBitonic_B8
 #pragma kernel ParallelBitonic_B4
@@ -22,6 +23,7 @@ RWStructuredBuffer<Vertex> _VertexBuffer;
 
 #define THREAD_NUM 128
 
+RWStructuredBuffer<float> _DensityBuffer;
 RWStructuredBuffer<ReactionDiffusionParams> _ReactionDiffusionParamsBuffer;
 
 float _VertexDistanceScale;
@@ -46,6 +48,25 @@ void Init(uint id : SV_DispatchThreadID)
 }
 
 [numthreads(THREAD_NUM, 1, 1)]
+void CalcDensity(uint id : SV_DispatchThreadID)
+{
+    if(id > (uint)_VertexNum - 1) return;
+
+    float density = 0.0;
+    SEARCH_NEIBOUR_PARTICLE_INDEX_START(id, vertexPos, neighborVertexId)
+    {
+        float3 neighborVertexPos = _VertexBuffer[neighborVertexId].position;
+        float3 diff = neighborVertexPos - vertexPos;
+        float dist = sqrt(dot(diff, diff)) * _VertexDistanceScale;
+        float smoothLength = _SmoothLength * _VertexDistanceScale;
+        density += Poly6(dist, smoothLength);
+    }
+    SEARCH_NEIBOUR_PARTICLE_INDEX_END
+
+    _DensityBuffer[id] = density;
+}
+
+[numthreads(THREAD_NUM, 1, 1)]
 void Integrate(uint id : SV_DispatchThreadID)
 {
     if(id > (uint)_VertexNum - 1) return;
@@ -57,16 +78,18 @@ void Integrate(uint id : SV_DispatchThreadID)
     float nextA = A;
     float nextB = B;
 
-    SEARCH_NEIBOUR_PARTICLE_START(id, vertexPos, neighborVertexPos, neighborVertexId)
+    SEARCH_NEIBOUR_PARTICLE_INDEX_START(id, vertexPos, neighborVertexId)
     {
+        float3 neighborVertexPos = _VertexBuffer[neighborVertexId].position;
         ReactionDiffusionParams neighborParams = _ReactionDiffusionParamsBuffer[neighborVertexId];
+        float density = _DensityBuffer[neighborVertexId];
         float3 diff = neighborVertexPos - vertexPos;
         float dist = sqrt(dot(diff, diff)) * _VertexDistanceScale;
         float smoothLength = _SmoothLength * _VertexDistanceScale;
-        nextA += _DiffusionRateA * ViscosityLaplacian(dist, smoothLength) * (neighborParams.A - A) * _DeltaTime;
-        nextB += _DiffusionRateB * ViscosityLaplacian(dist, smoothLength) * (neighborParams.B - B) * _DeltaTime;
+        nextA += _DiffusionRateA * ViscosityLaplacian(dist, smoothLength) / density * (neighborParams.A - A) * _DeltaTime;
+        nextB += _DiffusionRateB * ViscosityLaplacian(dist, smoothLength) / density * (neighborParams.B - B) * _DeltaTime;
     }
-    SEARCH_NEIBOUR_PARTICLE_END
+    SEARCH_NEIBOUR_PARTICLE_INDEX_END
 
     nextA += (-A * B * B + _Feed * (1 - A)) * _DeltaTime;
     nextB += (A * B * B - (_Kill + _Feed) * B) * _DeltaTime;

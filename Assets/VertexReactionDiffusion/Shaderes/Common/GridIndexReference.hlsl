@@ -33,7 +33,7 @@ RWStructuredBuffer<GridIndexReference> _GridIndexReferenceBuffer;
 
 int _GridIndexReferenceBufferLength;
 
-#define SEARCH_NEIBOUR_PARTICLE_START(THREAD_INDEX,PARTICLE_POS,NEIBOUR_PARTICLE_POS,NEIBOUR_PARTICLE_INDEX) \
+#define SEARCH_NEIBOUR_PARTICLE_INDEX_START(THREAD_INDEX,PARTICLE_POS,NEIBOUR_PARTICLE_INDEX) \
 float3 PARTICLE_POS = PARTICLE_BUFFER[THREAD_INDEX].position;\
 int3 gridIndexes = PositionToGridIndexes(PARTICLE_POS);\
 for(int x = max(gridIndexes.x - 1, 0); x <= min(gridIndexes.x + 1, _GridNum.x - 1); x++){\
@@ -42,10 +42,9 @@ for(int z = max(gridIndexes.z - 1, 0); z <= min(gridIndexes.z + 1, _GridNum.z - 
 int neighborGridIndex = GridIndexesToGridIndex(int3(x, y, z));\
 GridIndexReference gridIndexReference = _GridIndexReferenceBuffer[neighborGridIndex];\
 for(int i = gridIndexReference.startIndex; i <= gridIndexReference.endIndex; i++){\
-int NEIBOUR_PARTICLE_INDEX = _GridIndexBuffer[i].particleIndex;\
-float3 NEIBOUR_PARTICLE_POS = _VertexBuffer[NEIBOUR_PARTICLE_INDEX].position;
+int NEIBOUR_PARTICLE_INDEX = _GridIndexBuffer[i].particleIndex;
 
-#define SEARCH_NEIBOUR_PARTICLE_END }}}}
+#define SEARCH_NEIBOUR_PARTICLE_INDEX_END }}}}
 
 [numthreads(GRID_INDEX_REFERENCE_THREAD_NUM, 1, 1)]
 void BuildGridBuffer(uint id : SV_DispatchThreadID)

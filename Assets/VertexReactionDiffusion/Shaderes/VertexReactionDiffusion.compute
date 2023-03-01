@@ -94,6 +94,9 @@ void Integrate(uint id : SV_DispatchThreadID)
     nextA += (-A * B * B + _Feed * (1 - A)) * _DeltaTime;
     nextB += (A * B * B - (_Kill + _Feed) * B) * _DeltaTime;
 
+    nextA = saturate(nextA);
+    nextB = saturate(nextB);
+
     _ReactionDiffusionParamsBuffer[id].A = nextA;
     _ReactionDiffusionParamsBuffer[id].B = nextB;
 }

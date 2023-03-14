@@ -10,12 +10,15 @@
 #pragma kernel BuildGridBuffer
 #pragma kernel ClearGridIndexReferenceBuffer
 #pragma kernel BuildGridIndexReferenceBuffer
+#pragma kernel BuildSortedParticleBuffer
 
 struct Vertex { float3 position; };
 int _VertexNum;
 RWStructuredBuffer<Vertex> _VertexBuffer;
+RWStructuredBuffer<Vertex> _SortedVertexBuffer;
 #define PARTICLE Vertex
 #define PARTICLE_BUFFER _VertexBuffer
+#define SORTED_PARTICLE_BUFFER _SortedVertexBuffer
 #define PARTICLE_NUM _VertexNum
 #include "Assets/VertexReactionDiffusion/Shaderes/Common/GridIndexReference.hlsl"
 #include "Assets/VertexReactionDiffusion/Shaderes/Common/Struct/ReactionDiffusionParams.hlsl"
@@ -52,16 +55,19 @@ void CalcDensity(uint id : SV_DispatchThreadID)
 {
     if(id > (uint)_VertexNum - 1) return;
 
+    float3 vertexPos = _VertexBuffer[id].position;
+    int3 gridIndexes = PositionToGridIndexes(vertexPos);
+
     float density = 0.0;
-    SEARCH_NEIBOUR_PARTICLE_INDEX_START(id, vertexPos, neighborVertexId)
+    SEARCH_NEIGHBOUR_PARTICLE_START(gridIndexes, neighborVertex)
     {
-        float3 neighborVertexPos = _VertexBuffer[neighborVertexId].position;
+        float3 neighborVertexPos = neighborVertex.position;
         float3 diff = neighborVertexPos - vertexPos;
         float dist = sqrt(dot(diff, diff)) * _VertexDistanceScale;
         float smoothLength = _SmoothLength * _VertexDistanceScale;
         density += Poly6(dist, smoothLength);
     }
-    SEARCH_NEIBOUR_PARTICLE_INDEX_END
+    SEARCH_NEIGHBOUR_PARTICLE_END
 
     _DensityBuffer[id] = density;
 }
@@ -78,9 +84,12 @@ void Integrate(uint id : SV_DispatchThreadID)
     float nextA = A;
     float nextB = B;
 
-    SEARCH_NEIBOUR_PARTICLE_INDEX_START(id, vertexPos, neighborVertexId)
+    float3 vertexPos = _VertexBuffer[id].position;
+    int3 gridIndexes = PositionToGridIndexes(vertexPos);
+
+    SEARCH_NEIGHBOUR_PARTICLE_WITH_INDEX_START(gridIndexes, neighborVertex, neighborVertexId)
     {
-        float3 neighborVertexPos = _VertexBuffer[neighborVertexId].position;
+        float3 neighborVertexPos = neighborVertex.position;
         ReactionDiffusionParams neighborParams = _ReactionDiffusionParamsBuffer[neighborVertexId];
         float density = _DensityBuffer[neighborVertexId];
         float3 diff = neighborVertexPos - vertexPos;
@@ -89,7 +98,7 @@ void Integrate(uint id : SV_DispatchThreadID)
         nextA += _DiffusionRateA * ViscosityLaplacian(dist, smoothLength) / density * (neighborParams.A - A) * _DeltaTime;
         nextB += _DiffusionRateB * ViscosityLaplacian(dist, smoothLength) / density * (neighborParams.B - B) * _DeltaTime;
     }
-    SEARCH_NEIBOUR_PARTICLE_INDEX_END
+    SEARCH_NEIGHBOUR_PARTICLE_WITH_INDEX_END
 
     nextA += (-A * B * B + _Feed * (1 - A)) * _DeltaTime;
     nextB += (A * B * B - (_Kill + _Feed) * B) * _DeltaTime;

@@ -24,12 +24,11 @@ namespace VertexReactionDiffusion
         private Vector3 _gridAreaMin;
         private Vector3 _gridSize;
         private GraphicsBuffer _vertexBuffer;
+        private GraphicsBuffer _sortedVertexBuffer;
         private GraphicsBuffer _gridIndexBuffer;
         private GraphicsBuffer _gridIndexReferenceBuffer;
         private GraphicsBuffer _reactionDiffusionParamsBuffer;
         private GraphicsBuffer _densityBuffer;
-
-        private Struct.GridIndex[] _gridIndexArray;
 
         private void Start()
         {
@@ -48,14 +47,14 @@ namespace VertexReactionDiffusion
             _gridIndexReferenceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _gridNum.x * _gridNum.y * _gridNum.z, Marshal.SizeOf(typeof(Struct.GridIndexReference)));
             _reactionDiffusionParamsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _vertexNum, Marshal.SizeOf(typeof(Struct.ReactionDiffusionParams)));
             _vertexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _vertexNum, Marshal.SizeOf(typeof(Vector3)));
+            _sortedVertexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _vertexNum, Marshal.SizeOf(typeof(Vector3)));
             _densityBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _vertexNum, Marshal.SizeOf(typeof(float)));
 
             _vertexBuffer.SetData(_mesh.vertices);
 
-            _gridIndexArray = new Struct.GridIndex[_gridIndexBuffer.count];
-            for(int i = 0; i < _gridIndexArray.Length; i++) _gridIndexArray[i] = new Struct.GridIndex(){Index = int.MaxValue};
-
-            _gridIndexBuffer.SetData(_gridIndexArray);
+            Struct.GridIndex[] gridIndexArray = new Struct.GridIndex[_gridIndexBuffer.count];
+            for(int i = 0; i < gridIndexArray.Length; i++) gridIndexArray[i] = new Struct.GridIndex(){Index = int.MaxValue};
+            _gridIndexBuffer.SetData(gridIndexArray);
 
             Kernel kernel = new Kernel(_computeShader, "Init");
             _computeShader.SetFloat("_InitialBScale", _initialBScale);
@@ -96,11 +95,18 @@ namespace VertexReactionDiffusion
             _computeShader.SetBuffer(kernel.Index, "_GridIndexReferenceBuffer", _gridIndexReferenceBuffer);
             _computeShader.Dispatch(kernel.Index, _gridIndexBuffer.count / kernel.ThreadNumX + 1, 1, 1);
 
+            kernel = new Kernel(_computeShader, "BuildSortedParticleBuffer");
+            _computeShader.SetBuffer(kernel.Index, "_GridIndexBuffer", _gridIndexBuffer);
+            _computeShader.SetBuffer(kernel.Index, "_VertexBuffer", _vertexBuffer);
+            _computeShader.SetBuffer(kernel.Index, "_SortedVertexBuffer", _sortedVertexBuffer);
+            _computeShader.Dispatch(kernel.Index, _gridIndexBuffer.count / kernel.ThreadNumX + 1, 1, 1);
+
             kernel = new Kernel(_computeShader, "CalcDensity");
             _computeShader.SetBuffer(kernel.Index, "_GridIndexBuffer", _gridIndexBuffer);
             _computeShader.SetBuffer(kernel.Index, "_GridIndexReferenceBuffer", _gridIndexReferenceBuffer);
             _computeShader.SetBuffer(kernel.Index, "_DensityBuffer", _densityBuffer);
             _computeShader.SetBuffer(kernel.Index, "_VertexBuffer", _vertexBuffer);
+            _computeShader.SetBuffer(kernel.Index, "_SortedVertexBuffer", _sortedVertexBuffer);
             _computeShader.Dispatch(kernel.Index, _gridIndexBuffer.count / kernel.ThreadNumX + 1, 1, 1);
 
             kernel = new Kernel(_computeShader, "Integrate");
@@ -108,6 +114,7 @@ namespace VertexReactionDiffusion
             _computeShader.SetBuffer(kernel.Index, "_GridIndexReferenceBuffer", _gridIndexReferenceBuffer);
             _computeShader.SetBuffer(kernel.Index, "_ReactionDiffusionParamsBuffer", _reactionDiffusionParamsBuffer);
             _computeShader.SetBuffer(kernel.Index, "_VertexBuffer", _vertexBuffer);
+            _computeShader.SetBuffer(kernel.Index, "_SortedVertexBuffer", _sortedVertexBuffer);
             _computeShader.SetBuffer(kernel.Index, "_DensityBuffer", _densityBuffer);
             _computeShader.Dispatch(kernel.Index, _vertexNum / kernel.ThreadNumX + 1, 1, 1);
 
@@ -119,6 +126,7 @@ namespace VertexReactionDiffusion
         private void OnDestroy()
         {
             _vertexBuffer?.Dispose();
+            _sortedVertexBuffer?.Dispose();
             _gridIndexBuffer?.Dispose();
             _gridIndexReferenceBuffer?.Dispose();
             _reactionDiffusionParamsBuffer?.Dispose();

@@ -95,8 +95,8 @@ void Integrate(uint id : SV_DispatchThreadID)
         float3 diff = neighborVertexPos - vertexPos;
         float dist = sqrt(dot(diff, diff)) * _VertexDistanceScale;
         float smoothLength = _SmoothLength * _VertexDistanceScale;
-        nextA += _DiffusionRateA * ViscosityLaplacian(dist, smoothLength) / density * (neighborParams.A - A) * _DeltaTime;
-        nextB += _DiffusionRateB * ViscosityLaplacian(dist, smoothLength) / density * (neighborParams.B - B) * _DeltaTime;
+        nextA += _DiffusionRateA * CubicSpline(dist, smoothLength) / density * (neighborParams.A - A) * _DeltaTime;
+        nextB += _DiffusionRateB * CubicSpline(dist, smoothLength) / density * (neighborParams.B - B) * _DeltaTime;
     }
     SEARCH_NEIGHBOUR_PARTICLE_WITH_INDEX_END
 
